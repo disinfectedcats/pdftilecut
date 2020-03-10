@@ -2,8 +2,9 @@ name: Build Static Binaries
 on: [push]
 
 jobs:
-  build:
-    name: Build
+
+  build-linux-amd64:
+    name: Build Linux amd64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -14,3 +15,63 @@ jobs:
         run: sudo apt-get install -y yasm auto{gen,conf,make}
       - name: Build
         run: make
+      - uses: actions/upload-artifact@v1
+        with:
+          name: pdftilecut-linux-amd64
+          path: bin/pdftilecut
+
+  build-darwin-amd64:
+    name: Build Darwin amd64
+    runs-on: macos-10.15
+    steps:
+      - uses: actions/checkout@v2
+      - name: Dependencies
+        run: |
+          brew update
+          brew install go@1.13 yasm automake autogen coreutils 
+      - name: Build
+        run: make
+      - uses: actions/upload-artifact@v1
+        with:
+          name: pdftilecut-darwin-amd64
+          path: bin/pdftilecut
+
+  release:
+    name: Release
+    needs: [build-linux-amd64, build-darwin-amd64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'v')
+    steps:
+      - uses: actions/download-artifact@v1
+        with:
+          name: pdftilecut-linux-amd64
+      - uses: actions/download-artifact@v1
+        with:
+          name: pdftilecut-darwin-amd64
+      - name: Compress artifacts
+        run: |
+          zip pdftilecut-linux-amd64{.zip,}
+          zip pdftilecut-darwin-amd64{.zip,}
+      - id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+      - uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./pdftilecut-linux-amd64.zip
+          asset_name: pdftilecut-linux-amd64.zip
+          asset_content_type: application/zip
+      - uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./pdftilecut-darwin-amd64.zip
+          asset_name: pdftilecut-darwin-amd64.zip
+          asset_content_type: application/zip
